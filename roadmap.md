@@ -9,20 +9,21 @@ A standalone C++ inference engine (using ggml as a library, NVIDIA-only for now)
 **Repo:** github.com/FlashML-org/FreeToken
 **Paper:** arXiv:2608.16157 — "FreeToken: Efficient Edge-Native MoE Serving with Bandwidth-Adaptive Execution" (Yang, Fan, Pan, Xi, Wang, Sun, Keutzer, Han, Zaharia, Xu, Stoica — UT Austin / UC Berkeley)
 
-**Core idea (read this before writing any code):** FreeToken does NOT rely on simple hot-expert caching with synchronous fallback. Its central mechanism is the **q\* policy** — on a GPU cache miss, instead of stalling while the expert streams over PCIe, it dynamically splits that token's compute between CPU cores and GPU tensor cores in real time, based on measured interconnect bandwidth. This is a **compute-splitting scheduler**, not just a memory-placement policy — that distinction is the whole point of the paper, and any port that reduces to plain LRU caching with synchronous streaming is missing the actual contribution.
+**Core idea (read this before writing any code):** FreeToken does NOT rely on simple hot-expert caching with synchronous fallback. Its central mechanism is the **q\* policy** — at each decode step, of the set of experts that missed the GPU cache (size `m`), it partitions them into a GPU-fill subset `F` (size `q`, transferred over PCIe into the cache) and a CPU-direct-execute subset `C` (size `m-q`, computed in place on the CPU), run **concurrently**, then merges their partial outputs exactly. This is a **per-step scheduling decision over a set of missing experts**, not "splitting one token's math in half between two processors" — a distinction that matters for implementing Module 3.4 correctly. The split size is a genuinely simple closed form, not something requiring an interim heuristic: `q* ≈ m · (B_P / B_H)`, where `B_P` is measured PCIe transfer bandwidth and `B_H` is measured CPU-side expert-processing bandwidth (paper §3.2, Eq. 1–4). **Both bandwidths are empirically profiled on the actual deployed hardware at startup** — this detail matters, see the correction below.
 
 **Memory architecture as designed (2-tier, not 3):**
 - **Host-Resident Pool (DRAM):** the complete set of expert weights — the "source of truth."
 - **GPU-Expert Cache (VRAM):** a dynamic, shared cache of currently-hot experts.
 - FreeToken deliberately stops at DRAM as the floor — it assumes host RAM is large enough to hold the full model, which covers most workstations/gaming PCs.
 
-**Our scoped extensions beyond a straight port** (see Section 2a for full rationale):
-1. **Hardware calibration pass** — measure actual PCIe/DRAM bandwidth on startup (an OSPI-PHY-tuning-style bring-up step) instead of estimating purely at runtime. This is the headline novel contribution — it directly reuses embedded hardware-characterization experience.
-2. **Async SSD prefetch tier** — for models exceeding host DRAM, add a third tier that prefetches experts from disk into DRAM ahead of need (layer-order lookahead), never computed against directly. Only build/benchmark this if the target model+hardware pairing genuinely exceeds host RAM — otherwise it's unfalsifiable in your own benchmarks.
-3. **Library-first API** — expose the engine as a linkable C++ library (like llama.cpp itself), not just a server process.
-4. **Static schedule mode (optional)** — precompute a per-layer CPU/GPU split once via profiling, instead of deciding every token, for fixed-deployment scenarios where FreeToken's real-time adaptivity isn't needed.
+**CORRECTION (2026-09-19, after actually reading the paper — `docs/references/freetoken_arxiv_2608.16157.pdf`):** the hardware calibration pass previously listed below as "the headline novel contribution... not described in the paper" is **already in the paper**. §3.2 states the bandwidth parameters `B_H` and `B_P` "are empirically profiled on the target hardware at deployment," and Table 1's caption confirms all bandwidths were measured on deployed hardware, not taken from spec sheets. Porting this correctly is real, valuable work — it just isn't *original* work, and claiming otherwise in an interview to someone who's read the paper would be an easily-caught mistake. See the corrected novelty table in §2a.
 
-**Citation discipline:** every writeup, README, and interview answer should describe this as "a C++/ggml, NVIDIA-only port and extension of FreeToken's q\* co-execution design," with the paper cited. Claiming the caching/splitting idea as original would be inaccurate and would read poorly to anyone in this space.
+**Our scoped extensions beyond a straight port** (see Section 2a for full rationale):
+1. **Async SSD prefetch tier** — for models exceeding host DRAM, add a third tier that prefetches experts from disk into DRAM ahead of need (layer-order lookahead), never computed against directly. Only build/benchmark this if the target model+hardware pairing genuinely exceeds host RAM — otherwise it's unfalsifiable in your own benchmarks. (Confirmed still genuinely absent from the paper: FreeToken's expert pool is loaded from disk once at startup and never used as an execution/prefetch tier.)
+2. **Library-first API** — expose the engine as a linkable C++ library (like llama.cpp itself), not just a server process.
+3. **Static schedule mode (optional)** — precompute a per-layer CPU/GPU split once via profiling, instead of deciding every token, for fixed-deployment scenarios where FreeToken's real-time adaptivity isn't needed.
+
+**Citation discipline:** every writeup, README, and interview answer should describe this as "a C++/ggml, NVIDIA-only port and extension of FreeToken's q\* co-execution design," with the paper cited. Claiming the caching/splitting idea — or the calibration pass — as original would be inaccurate and would read poorly to anyone in this space.
 
 ---
 
@@ -32,7 +33,7 @@ A standalone C++ inference engine (using ggml as a library, NVIDIA-only for now)
 |---|---|---|---|
 | **Model loading** | GGUF parser, tensor graph via ggml | C++, binary file formats, mmap | Familiar with binary/register-level thinking from embedded |
 | **Bandwidth calibration** | Startup pass measuring real PCIe/DRAM throughput | Benchmarking methodology, low-level timing | Direct parallel to OSPI PHY tuning bring-up |
-| **q\*-style scheduler** | Split token compute between CPU/GPU on cache miss, using measured bandwidth | C++, real-time scheduling logic, no-stall design | EDMA-style "move data to where compute happens" thinking |
+| **q\*-style scheduler** | Per decode-step, partition the set of missing experts between GPU-fill and CPU-direct-execute using measured bandwidth (`q* ≈ m·B_P/B_H`), run concurrently, merge exactly | C++, real-time scheduling logic, no-stall design | EDMA-style "move data to where compute happens" thinking |
 | **GPU-Expert Cache (VRAM)** | Dynamic, shared hot-expert cache | CUDA basics, memory allocation, async copy | New — but memory-tier concept is familiar |
 | **Host-Resident Pool (DRAM)** | Full expert set as source of truth, CPU-computable fallback | Linux virtual memory, `mlock`/`cudaHostAlloc`, DMA | Directly maps to your PSRAM/OCRAM offload work |
 | **SSD prefetch tier (extension)** | Async layer-lookahead prefetch into DRAM, never computed against directly | `pread`/`io_uring`, async I/O, page cache behavior | Directly maps to your flash/QSPI experience |
@@ -112,13 +113,13 @@ Independent of the engine internals — can be prototyped early against any Open
 | Contribution | FreeToken has this? | Why it's defensible as "yours" |
 |---|---|---|
 | C++/ggml, NVIDIA-only implementation | No (Python) | Genuine reimplementation in a different systems stack |
-| q\* compute-splitting logic | Yes — ported, not invented | Correctly porting a subtle mechanism is real engineering work, but credit the source |
-| Hardware calibration pass | Not described in the paper | **Headline original contribution** — directly reuses your OSPI PHY-tuning background |
+| q\* scheduling policy (fetch-set/compute-set split) | Yes — ported, not invented | Correctly porting a subtle mechanism (§3.2, Eq. 1–4) is real engineering work, but credit the source |
+| Hardware calibration pass (measuring `B_P`/`B_H` on deployed hardware) | **Yes — ported, not invented.** CORRECTED 2026-09-19 after reading the paper: §3.2 explicitly says these bandwidths are "empirically profiled on the target hardware at deployment." Previously miscategorized here as an original contribution — it isn't. | Still real, valuable engineering work — porting a load-bearing measurement step correctly and reasoning about it from an embedded hardware-characterization background — but credit the source, same as the q\* port |
 | Async SSD prefetch tier | No — paper stops at DRAM | Genuine extension, conditional on model exceeding host RAM |
 | Library-first API | Partial (Python package) | Different consumption model, legitimate design choice |
 | Static schedule mode | No — paper assumes dynamic agent workloads | A deliberate alternative design point for fixed deployments |
 
-**How to talk about this in interviews:** lead with the calibration pass as your standout original idea, describe the q\* port as "correctly understanding and reimplementing a research system's core mechanism in C++" (itself a real skill signal), and mention the SSD tier / library API / static mode as secondary extensions or documented future work.
+**How to talk about this in interviews:** describe the q\* port (including its calibration step) as "correctly understanding and reimplementing a research system's core mechanism in C++" — that's the actual, defensible skill signal here, not a false originality claim. Lead with the SSD prefetch tier as the genuine extension, and mention library API / static mode as secondary. Do NOT claim the calibration pass as original — it was checked directly against the paper and isn't.
 
 ---
 

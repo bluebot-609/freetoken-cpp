@@ -105,11 +105,12 @@ freetoken-cpp/
 - **Cite:** the FreeToken paper's cache design section; note any deliberate deviation.
 
 ### 3.4 q\*-Style Scheduler (the core contribution)
-- On a cache miss: instead of stalling for a synchronous H2D copy, split the token's compute — dispatch to CPU (against the Host-Resident Pool directly) while the GPU continues other work.
-- Split decision uses measured bandwidth (from Module 3.6) against a configurable threshold or heuristic — start with a simple threshold, document it as a simplification of FreeToken's closed-form optimal split.
-- **Exposed parameters:** split heuristic mode (`threshold` | `closed_form` — closed_form as a stretch goal), CPU thread count dedicated to fallback compute.
+- CORRECTED 2026-09-19 after reading `docs/references/freetoken_arxiv_2608.16157.pdf` §3.2 directly (this section previously described the mechanism from the roadmap's summary, not the primary source — now aligned with the paper):
+- At each decode step, of the set `M` of experts that missed the GPU cache (size `m`), partition them into a GPU-fill subset `F` (size `q`, transferred over PCIe into the cache and executed there) and a CPU-direct-execute subset `C` (size `m-q`, computed in place against the Host-Resident Pool). Run both branches **concurrently**, then merge their partial outputs exactly (no approximation). This is a per-step decision over a *set* of missing experts, not "splitting one token's math between two processors."
+- The split size is **already a simple closed form**, not a stretch goal: `q* ≈ m · (B_P / B_H)`, where `B_P` and `B_H` (from Module 3.6) are the measured PCIe transfer bandwidth and measured CPU-side expert-processing bandwidth, respectively (paper Eq. 1–4). Implement this directly in v1 — there is no need for an interim "threshold heuristic" phase, since the real formula is one division, not something requiring approximation first.
+- **Exposed parameters:** CPU thread count dedicated to the compute-set `C`. (No `threshold`/`closed_form` mode selector needed — see above.)
 - **This module needs the most thorough code comments and citations of anything in the repo** — every deviation from the paper's actual formulation must be explicitly noted, not silently simplified.
-- **Cite:** FreeToken paper §"Architecture of Edge-Native MoE Serving" and the q\* policy section specifically.
+- **Cite:** FreeToken paper §3.2 ("Decode Codesign: Semantic-Aware Expert Caching and q\* Policy"), specifically Eq. 1–4.
 
 ### 3.5 Async SSD Prefetch Tier (conditional — only if target model exceeds host RAM)
 - Never computed against directly — strictly prefetches into the Host-Resident Pool ahead of need.
@@ -221,7 +222,7 @@ State these clearly so the coding agent doesn't scope-creep:
 - No AMD/ROCm support.
 - No multi-GPU/multi-node support.
 - No training or fine-tuning — inference only.
-- No full closed-form optimal q* split in v1 — threshold heuristic first, closed-form as documented future work.
+- ~~No full closed-form optimal q* split in v1 — threshold heuristic first, closed-form as documented future work.~~ CORRECTED 2026-09-19: this was based on an assumption before reading the paper. The real closed form (`q* ≈ m·B_P/B_H`, §3.2) is simple enough to implement directly — see Module 3.4. Not a non-goal; removing the "not now" hedge accordingly.
 - No custom quantization formats — consume whatever GGUF quantization is already present in the model file.
 - No web UI — CLI and API only.
 
