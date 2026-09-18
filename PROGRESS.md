@@ -1,10 +1,10 @@
 # Progress Log
 
 ## Current Phase
-Phase 1 — Core mechanism (per roadmap.md). dev_spec.md §8 step 3 complete: Host-Resident Pool (3.2) + GPU-Expert Cache (3.3) naive baseline, built and verified end-to-end.
+Phase 1 — Core mechanism (per roadmap.md). dev_spec.md §8 steps 3 AND 4 complete: memory-tier baseline (3.2/3.3) and the SPSC queue (3.8), both built and verified.
 
 ## Last Updated
-2026-09-19 — Module 3.2 (Host-Resident Pool) and Module 3.3 (GPU-Expert Cache) baseline implemented, wired together, and verified with a real smoke test (hit/miss counts and a VRAM readback both correct).
+2026-09-19 — Module 3.8 (SPSC lock-free queue) implemented and stress-tested: 200,000 items through a 16-slot ring buffer across two real threads, 8/8 clean runs, no drops/reorders.
 
 ## Completed
 - Environment: WSL2 Ubuntu 26.04 LTS installed and set as the dev environment (native Windows lacks `mlock`/`madvise`/`io_uring`). GPU passthrough confirmed (`nvidia-smi` works in WSL2). Toolchain installed: `build-essential`, `cmake` 4.2.3, `nvidia-cuda-toolkit` (nvcc 12.4.131 — driver is 610.88/CUDA 13.3-capable, so 12.4 toolkit is comfortably compatible), `strace`, `perf`.
@@ -25,14 +25,16 @@ Phase 1 — Core mechanism (per roadmap.md). dev_spec.md §8 step 3 complete: Ho
 - **CMake gotcha found and fixed:** `find_package(CUDAToolkit)` inside `third_party/ggml`'s own CMakeLists did NOT make `CUDA::cudart` visible to `src/core/memory/CMakeLists.txt`, even though the configure log showed ggml's own call succeeding. Fixed by calling `find_package(CUDAToolkit REQUIRED)` explicitly in the root `CMakeLists.txt`. Logged in `docs/citations.md`.
 - **Verified end-to-end:** `tests/integration/memory_smoke.cpp` — registers 3 fake experts, undersizes the GPU cache to 2 slots, accesses in an order that forces 2 evictions, and checks: (1) real hit/miss counts match expectation exactly (1 hit, 4 misses), (2) a `cudaMemcpyDeviceToHost` readback of a cached expert matches the original data exactly (PASS). This is the first real proof the memory-tier mechanism works, not just "it compiled."
 - `CLAUDE.md` updated with a standing "teaching mode" section (author's explicit request): all future code gets introduced what/why first, then built in small chunks — not dumped as whole files.
+- **Module 3.8 (SPSC lock-free queue):** `src/core/concurrency/spsc_queue.h` — header-only (it's a template, so the implementation has to live in the header, not a `.cpp`; noted explicitly since this differs from every other module so far). Classic monotonic-counter ring buffer (Anthony Williams, *C++ Concurrency in Action* — cited per `CLAUDE.md` discipline), with `push()`/`pop()` synchronized via `memory_order_acquire`/`release` pairs, no mutex. `add_library(... INTERFACE)` used in its CMakeLists since there's nothing to compile.
+- **Verified under real concurrency, not just single-threaded:** `tests/unit/spsc_queue_test.cpp` — a plain single-threaded edge-case test (empty/full behavior) first, then a real stress test: two actual `std::thread`s, one pushing 200,000 sequential ints, one popping and checking strict order, through a deliberately tiny 16-slot queue (forces ~12,500 wrap-arounds). Ran 8 times back-to-back, all clean — deliberately more than once, since races are timing-dependent and a single pass proves less than it looks like it does.
 
 ## In Progress
-Nothing mid-flight. Host-Resident Pool + GPU-Expert Cache baseline is done and verified.
+Nothing mid-flight. dev_spec.md §8 steps 3 and 4 are both done and verified.
 
 ## Next Concrete Step
-Per dev_spec.md §8 step 4: implement the SPSC lock-free queue (Module 3.8) **in isolation**, and unit-test it under concurrent load, *before* wiring it into anything else — a concurrency bug is much easier to isolate here than after it's tangled into the scheduler. This comes before the q* scheduler (Module 3.4, step 5), which uses this queue for CPU/GPU work dispatch.
+Per dev_spec.md §8 step 5: the q* scheduler (Module 3.4) — a fixed-threshold split using the SPSC queue above for CPU/GPU work dispatch, benchmarked against the Phase-3-baseline (the stall-and-copy `GpuExpertCache` from Modules 3.2/3.3) immediately, not after everything else is "ready."
 
-Before writing the q* scheduler itself (not blocking the queue work above): actually read the FreeToken paper's q* section and skim `FlashML-org/FreeToken` (read-only reference, not vendored, per roadmap.md §0) — this was flagged as a prerequisite before and still hasn't happened. It was fine to skip for the pool/cache baseline just built, since that's a generic naive-cache strawman, not FreeToken's actual contribution — but the q* scheduler IS the paper's contribution, and guessing its formulation instead of reading it would violate CLAUDE.md principle #4 (don't silently simplify the FreeToken design).
+**Before writing it:** actually read the FreeToken paper's q* section and skim `FlashML-org/FreeToken` (read-only reference, not vendored, per roadmap.md §0) — flagged as a prerequisite twice now and still hasn't happened. It was fine to defer for the memory-tier baseline and the SPSC queue (both generic mechanisms, not FreeToken-specific), but the q* scheduler IS the paper's actual contribution — guessing its formulation instead of reading it would violate CLAUDE.md principle #4 (don't silently simplify the FreeToken design). Do not start Module 3.4 without this happening first.
 
 ## Open Questions / Flags for the Author
 - CORRECTION to a prior entry: the build dir does NOT need to be on native WSL2 filesystem — re-tested and an in-repo `build/` (on `/mnt/c/...`) configures and builds fine. The original "Operation not permitted" `try_compile` failure was a one-off (likely Defender/AV momentarily locking a freshly-written `.exe`), not a structural DrvFs limitation. Build artifacts now live at `build/` in the repo, gitignored. See `docs/citations.md` for the corrected entry.
