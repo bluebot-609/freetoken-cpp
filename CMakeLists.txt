@@ -14,3 +14,4 @@ option(GGML_CUDA "ggml: use CUDA" ON)
 add_subdirectory(third_party/ggml)
 
 add_subdirectory(src)
+add_subdirectory(tests/fixtures)

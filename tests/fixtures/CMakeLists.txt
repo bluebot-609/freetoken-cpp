@@ -1,0 +1,2 @@
+add_executable(make_hello_gguf make_hello_gguf.cpp)
+target_link_libraries(make_hello_gguf PRIVATE ggml)
