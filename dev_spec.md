@@ -122,7 +122,7 @@ freetoken-cpp/
 - Runs at engine startup: measures actual achievable PCIe H2D/D2H bandwidth and DRAM read/write throughput on the current machine.
 - Feeds measured values into Module 3.4's split thresholds.
 - **Exposed parameters:** calibration sample size/duration (tradeoff: longer calibration = more accurate but slower startup), option to skip calibration and supply manual bandwidth values (useful for reproducible benchmarking across runs).
-- **Cite:** this is your own contribution — document the methodology clearly in `docs/architecture.md` with a comparison to how OSPI PHY tuning solves an analogous problem in the embedded context, since that's the actual justification for the technique.
+- **Cite:** CORRECTED 2026-09-19 — the general idea of measuring `B_P`/`B_H` on deployed hardware is FreeToken's own design (paper §3.2, "empirically profiled on the target hardware at deployment"), not ours; cite it. What genuinely IS our own choice: the paper doesn't detail its own measurement methodology beyond that one sentence, so the specifics below (what op to time, sample sizing, iteration count) are our engineering decision. Document that specific methodology in `docs/architecture.md` — the OSPI PHY-tuning analogy is fine for framing the *technique* (hardware bring-up characterization), but not as a novelty claim.
 
 ### 3.7 Engine Public API (library surface)
 - The single header/interface other code (server, harness, benchmark app) depends on.

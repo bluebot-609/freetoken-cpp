@@ -1,10 +1,10 @@
 # Progress Log
 
 ## Current Phase
-Phase 1 — Core mechanism (per roadmap.md). dev_spec.md §8 steps 3 AND 4 complete: memory-tier baseline (3.2/3.3) and the SPSC queue (3.8), both built and verified.
+Phase 1 — Core mechanism (per roadmap.md). dev_spec.md §8 steps 3, 4, and 6 complete: memory-tier baseline (3.2/3.3), SPSC queue (3.8), and the hardware calibration pass (3.6). NOTE: §8 technically orders the calibration pass (step 6) AFTER the scheduler (step 5) — we did it out of that order, by the author's explicit choice, so the scheduler could use real measured bandwidths from day one instead of stubs. Flagging the deviation per CLAUDE.md principle #5, not silently following a different order. Step 5 (q* scheduler, Module 3.4) is next — the actual core of the project.
 
 ## Last Updated
-2026-09-19 — FreeToken paper (arXiv:2608.16157) fetched and read in full (`docs/references/freetoken_arxiv_2608.16157.pdf`). Found and corrected a real mistake: the "hardware calibration pass" was wrongly claimed as our headline original contribution — it's actually already in the paper. roadmap.md and dev_spec.md corrected accordingly; details in docs/citations.md.
+2026-09-19 — Module 3.6 (Hardware Calibration Pass) implemented and verified with real measurements on this machine: B_P (PCIe H2D) ≈ 15–17 GB/s, B_H (CPU expert-kernel proxy) ≈ 11–13 GB/s.
 
 ## Completed
 - Environment: WSL2 Ubuntu 26.04 LTS installed and set as the dev environment (native Windows lacks `mlock`/`madvise`/`io_uring`). GPU passthrough confirmed (`nvidia-smi` works in WSL2). Toolchain installed: `build-essential`, `cmake` 4.2.3, `nvidia-cuda-toolkit` (nvcc 12.4.131 — driver is 610.88/CUDA 13.3-capable, so 12.4 toolkit is comfortably compatible), `strace`, `perf`.
@@ -29,14 +29,16 @@ Phase 1 — Core mechanism (per roadmap.md). dev_spec.md §8 steps 3 AND 4 compl
 - **Verified under real concurrency, not just single-threaded:** `tests/unit/spsc_queue_test.cpp` — a plain single-threaded edge-case test (empty/full behavior) first, then a real stress test: two actual `std::thread`s, one pushing 200,000 sequential ints, one popping and checking strict order, through a deliberately tiny 16-slot queue (forces ~12,500 wrap-arounds). Ran 8 times back-to-back, all clean — deliberately more than once, since races are timing-dependent and a single pass proves less than it looks like it does.
 
 - **FreeToken paper read in full** (`docs/references/freetoken_arxiv_2608.16157.pdf`, fetched from arXiv, 16 pages, 888KB), per dev_spec.md §8 step 5's prerequisite. Found a real mistake in our own docs and corrected it — see Open Questions below and `docs/citations.md` for full detail. `roadmap.md` §0/§1/§2a and `dev_spec.md` §3.4/§9 all updated to match the paper's actual formulation.
+- **Module 3.6 (Hardware Calibration Pass):** `src/core/scheduler/calibration.{h,cpp}` — `calibrate()` measures `B_P` (real `cudaMemcpy` H2D bandwidth, averaged over `config.iterations`) and `B_H` (a real ggml CPU compute op standing in for the not-yet-built real expert kernel, same deliberate-placeholder pattern as `model_loader.cpp`'s forward pass). `CalibrationConfig`/`CalibrationResult` are plain structs — "skip calibration, supply manual values" from dev_spec.md's exposed parameters needs no special API, a caller just builds the result struct directly.
+- Real numbers verified on this machine (`tests/integration/calibration_smoke.cpp`, 3 runs): `B_P` ≈ 15–17 GB/s, `B_H` ≈ 11–13 GB/s. `B_P` being well below the RTX 4070's ~31.5GB/s PCIe ceiling is expected and informative — the calibration buffer is plain pageable memory, not pinned, which is a real, measured confirmation of why `HostResidentPool.use_mlock` (Module 3.2) matters.
+- Own mistake caught and fixed: `measure_cpu_bandwidth()`'s `ggml_init_params.mem_size` was under-budgeted (forgot `ggml_scale()` allocates a second same-sized output tensor) — hit ggml's own assert (`ggml_new_object: not enough space`), fixed with a generous flat margin instead of exact arithmetic, same lesson as `model_loader.cpp`'s earlier sizing. Logged in `docs/citations.md`.
+- Corrected `dev_spec.md` §3.6's citation note too — it previously said the general calibration idea was "your own contribution," which the paper reading directly contradicts (same correction as the novelty table).
 
 ## In Progress
-Nothing mid-flight. dev_spec.md §8 steps 3 and 4 are done and verified. Paper read; docs corrected. Ready to start step 5.
+Nothing mid-flight. dev_spec.md §8 steps 3, 4, and 6 done and verified (6 done out of documented order — see Current Phase note). Paper read; docs corrected. Ready to start step 5.
 
 ## Next Concrete Step
-Per dev_spec.md §8 step 5: the q* scheduler (Module 3.4). Per the corrected `dev_spec.md` §3.4, this means: at each decode step, partition the set of cache-missing experts into a GPU-fill subset and a CPU-direct-execute subset sized by `q* ≈ m·(B_P/B_H)` (measured bandwidths, from Module 3.6 — not yet built), run both branches concurrently using the SPSC queue for CPU dispatch, merge results exactly, and benchmark against the Modules 3.2/3.3 stall-and-copy baseline immediately.
-
-Module 3.6 (bandwidth calibration — measuring real `B_P`/`B_H` on this machine) needs to exist before 3.4 can use real numbers; consider building a minimal version of it first, or a hardcoded/stubbed bandwidth pair to unblock 3.4's control flow before wiring in real measurement. Author should weigh in on which order feels right when we get there.
+Per dev_spec.md §8 step 5: the q* scheduler (Module 3.4), now unblocked — Module 3.6 exists and produces real `B_P`/`B_H` numbers. Per the corrected `dev_spec.md` §3.4: at each decode step, partition the set of cache-missing experts into a GPU-fill subset and a CPU-direct-execute subset sized by `q* ≈ m·(B_P/B_H)`, run both branches concurrently using the SPSC queue (Module 3.8) for CPU dispatch, merge results exactly, and benchmark against the Modules 3.2/3.3 stall-and-copy baseline immediately, per dev_spec.md's own "benchmark immediately, don't wait until everything's ready" instruction.
 
 ## Open Questions / Flags for the Author
 - **CORRECTED, significant:** roadmap.md previously claimed the hardware calibration pass as our "headline original contribution... not described in the paper." This was checked against the actual paper (§3.2) and is false — FreeToken already empirically profiles both bandwidths on deployed hardware. Fixed in roadmap.md §0/§2a and dev_spec.md §3.4/§9. If this project has been described to anyone (interview, README draft, etc.) using the old claim, that framing needs correcting too — flagging so it isn't repeated externally by mistake.
