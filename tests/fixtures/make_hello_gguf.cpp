@@ -20,14 +20,14 @@ int main(int argc, char** argv) {
     ggml_init_params params{ /*.mem_size=*/ ggml_tensor_overhead() + 256, /*.mem_buffer=*/ nullptr, /*.no_alloc=*/ false };
     ggml_context* ctx = ggml_init(params);
 
-    ggml_tensor* t = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, 4);
+    ggml_tensor* t = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, 8);
     ggml_set_name(t, "hello.weight");
     // ggml_set_f32_1d() is mentioned only in comments in this ggml version,
     // not actually declared — write through the data pointer directly
     // (valid since ggml_init() above used no_alloc=false).
     float* data = static_cast<float*>(t->data);
-    for (int i = 0; i < 4; ++i) {
-        data[i] = static_cast<float>(i + 1);
+    for (int i = 0; i < 8; ++i) {
+        data[i] = static_cast<float>(i + 5);
     }
 
     gguf_context* gguf_ctx = gguf_init_empty();
