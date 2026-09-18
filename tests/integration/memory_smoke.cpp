@@ -5,6 +5,7 @@
 // (fast) vs misses (slow — a real cudaMalloc + cudaMemcpy).
 #include <chrono>
 #include <cstdio>
+#include <vector>
 #include <cuda_runtime.h>
 
 #include "gpu_cache.h"
@@ -46,11 +47,43 @@ const void* timed_fetch(uint32_t expert_id, GpuExpertCache& cache, const HostRes
     return ptr;
 }
 
+// Proves the Module 3.2 pinning fix actually does what it claims: register
+// one 16MB expert (same size as calibration.cpp's default sample) in a
+// pinned pool and an unpinned pool, time a raw cudaMemcpy H2D from each,
+// and compare. This is the direct, measured answer to "does pin_memory
+// actually make transfers faster on this machine" — not a theoretical claim.
+void benchmark_pinned_vs_unpinned() {
+    constexpr size_t kBenchBytes = 16 * 1024 * 1024;
+    std::vector<char> source(kBenchBytes, 0);
+
+    void* device_buffer = nullptr;
+    cudaMalloc(&device_buffer, kBenchBytes);
+
+    auto time_copy_from_pool = [&](bool pin) {
+        HostPoolConfig cfg;
+        cfg.pin_memory = pin;
+        HostResidentPool pool(cfg);
+        pool.register_expert(0, source.data(), kBenchBytes);
+        const void* pool_data = pool.find(0)->data;
+
+        auto start = std::chrono::steady_clock::now();
+        cudaMemcpy(device_buffer, pool_data, kBenchBytes, cudaMemcpyHostToDevice);
+        double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        return static_cast<double>(kBenchBytes) / seconds / 1e9;  // GB/s
+    };
+
+    std::printf("\npinned vs unpinned H2D bandwidth (16MB transfer):\n");
+    std::printf("  unpinned (pin_memory=false): %.2f GB/s\n", time_copy_from_pool(false));
+    std::printf("  pinned   (pin_memory=true):  %.2f GB/s\n", time_copy_from_pool(true));
+
+    cudaFree(device_buffer);
+}
+
 }  // namespace
 
 int main() {
     HostPoolConfig pool_cfg;
-    pool_cfg.use_mlock = true;  // exercise the mlock path too; failure is non-fatal
+    pool_cfg.pin_memory = true;  // exercise the cudaHostAlloc path too; failure is non-fatal
     HostResidentPool pool(pool_cfg);
 
     constexpr uint32_t kNumExperts = 3;
@@ -94,5 +127,8 @@ int main() {
         if (readback[i] != expected[i]) ok = false;
     }
     std::printf("\ncorrectness check (expert 2 readback): %s\n", ok ? "PASS" : "FAIL");
+
+    benchmark_pinned_vs_unpinned();
+
     return ok ? 0 : 1;
 }
