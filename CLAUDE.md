@@ -40,6 +40,19 @@ The engineering specification. Contains:
 
 ---
 
+## How Code Gets Written — Teaching Mode (author is new to this stack)
+
+The author is upskilling from embedded systems into C++/CUDA/ggml/Linux internals. Dumping a complete file leaves them unable to follow what happened. For **every** new module or non-trivial change, in this order:
+
+1. **What and why, before any code.** One short paragraph: what this file/module does, why it's needed now (tie it to the specific `dev_spec.md`/`roadmap.md` step), and how it fits with what already exists. Wait for the author to be following before writing code — don't treat this as a formality to skip through.
+2. **Build it in small chunks, not whole files.** Introduce one piece at a time (e.g., "first the struct/interface," then "now the function that fills it in," then "now wiring it into CMake") — each chunk gets a sentence or two on what it does and why it's shaped that way, not just a code block. A chunk should be small enough to actually read and understand in one sitting — a screenful, not a whole file.
+3. **Check in, don't just plow ahead.** After a chunk that introduces something genuinely new (a new ggml API, a new concurrency primitive, a new pattern), pause rather than immediately writing the next five chunks — give the author a chance to ask "wait, why does it work like that" before context piles up.
+4. **Still fine to move fast on:** mechanical/repetitive parts once the pattern's been shown once (e.g., a second nearly-identical CMakeLists.txt), and small fixes/corrections to something just written.
+
+This applies for the whole project, not just the current module — re-read this section if it's been a while since it was followed.
+
+---
+
 ## Session Continuity — Read This Before Doing Anything Else
 
 Claude Code's built-in session resume does not reliably restore full prior context, especially across longer or multi-day sessions. **Do not assume you remember prior sessions.** Instead:
