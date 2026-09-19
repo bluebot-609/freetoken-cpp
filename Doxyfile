@@ -1,0 +1,42 @@
+# Doxygen config for FreeToken-C++. Only settings that differ from
+# Doxygen's own defaults are listed here -- run `doxygen -g` to see every
+# available option and its default value.
+#
+# Regenerate the site: `doxygen Doxyfile` from the repo root.
+# Output: docs_site/html/index.html (gitignored -- fully reproducible from
+# source, doesn't belong in git).
+
+PROJECT_NAME           = "FreeToken-C++"
+PROJECT_BRIEF          = "NVIDIA-only C++/ggml port of FreeToken's bandwidth-adaptive MoE serving"
+OUTPUT_DIRECTORY       = docs_site
+
+# Combine narrative markdown docs with the API reference, per the author's
+# request for "combine mds + api docs + tests".
+INPUT                  = docs/index.md \
+                          src \
+                          tests \
+                          roadmap.md \
+                          dev_spec.md \
+                          PROGRESS.md \
+                          CLAUDE.md \
+                          docs/building.md \
+                          docs/citations.md
+USE_MDFILE_AS_MAINPAGE = docs/index.md
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.cpp *.md
+EXCLUDE                = third_party build docs_site models
+
+# Document everything, even members without a doc comment (still shows the
+# signature/structure -- better than silently omitting undocumented code).
+EXTRACT_ALL             = YES
+EXTRACT_PRIVATE         = YES
+EXTRACT_STATIC          = YES
+
+# Navigation and readability.
+GENERATE_TREEVIEW      = YES
+SOURCE_BROWSER         = YES
+GENERATE_LATEX         = NO
+
+# Diagrams (graphviz installed alongside doxygen).
+HAVE_DOT               = YES
+DOT_GRAPH_MAX_NODES    = 30

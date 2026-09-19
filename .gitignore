@@ -2,3 +2,4 @@ build/
 benchmark/reports/*
 !benchmark/reports/.gitkeep
 models/
+docs_site/

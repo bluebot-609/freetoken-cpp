@@ -75,8 +75,21 @@ cmake --build build -j$(nproc)
 
 ## Testing
 
-No test framework is wired in yet — `dev_spec.md` §6 specifies Catch2 or GoogleTest (pulled via CMake `FetchContent`, not `apt`, per the project's "no package manager beyond FetchContent/submodules" rule), but no module has landed that needs testing yet (Phase 0's exit criterion, a ggml GGUF-loading smoke test, comes before the first real unit tests in Phase 1). Once tests exist, they'll register with CTest and run via:
+No framework (Catch2/GoogleTest) is wired in yet — `dev_spec.md` §6 names them as the eventual choice, pulled via CMake `FetchContent` when that happens. For now, every test is a plain executable that prints `PASS`/`FAIL` per check and returns a real process exit code (0 = all passed) — same idea as a framework, just hand-rolled, in `tests/unit/` (pure-logic checks) and `tests/integration/` (real GPU/pool/cache/model checks). Build and run any one directly:
 ```bash
-ctest --test-dir build
+cmake --build build --target spsc_queue_test
+./build/tests/unit/spsc_queue_test
 ```
-This section will get filled in with real specifics once the test framework is actually added — update it then rather than guessing the shape now.
+
+**Run everything at once**, with a consolidated report (real numbers — bandwidths, timings, speedups — not just pass/fail) saved to `benchmark/reports/`:
+```bash
+bash scripts/run_benchmarks.sh
+```
+
+## Generating API docs (Doxygen)
+
+Combines the API reference (extracted from `///` comments in `src/`'s headers — plain `//` comments are NOT picked up, that's a Doxygen convention, not a bug), the project's markdown docs, and the test tree into one browsable HTML site:
+```bash
+doxygen Doxyfile
+```
+Output: `docs_site/html/index.html` (open it in a browser). Gitignored — fully reproducible from source, so it isn't committed. Regenerate any time the code or docs change; nothing here is hand-maintained.

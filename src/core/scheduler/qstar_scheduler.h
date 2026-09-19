@@ -12,38 +12,38 @@
 
 namespace freetoken::core {
 
-// The result of splitting one decode step's missing experts (dev_spec.md
-// Module 3.4). `fill_set` goes through the GPU cache (Module 3.3);
-// `compute_set` is computed directly on the CPU against the Host-Resident
-// Pool (Module 3.2), bypassing the GPU entirely for those experts.
+/// The result of splitting one decode step's missing experts (dev_spec.md
+/// Module 3.4). `fill_set` goes through the GPU cache (Module 3.3);
+/// `compute_set` is computed directly on the CPU against the Host-Resident
+/// Pool (Module 3.2), bypassing the GPU entirely for those experts.
 struct QStarSplit {
     std::vector<uint32_t> fill_set;
     std::vector<uint32_t> compute_set;
 };
 
-// Computes q* (dev_spec.md Module 3.4, paper §3.2 Eq. 4): of `m` cache-
-// missing experts this decode step, how many should go to the GPU-fill
-// path vs the CPU-direct-execute path.
-//
-//   q* ≈ m · (B_P / B_H)
-//
-// Two edge cases the paper calls for explicitly, not left to chance:
-//   - Always at least 1 fill when m >= 1 ("the cache continues warming
-//     even when the CPU handles most misses" — paper §3.2).
-//   - Never more than m (can't fill more experts than are actually missing).
+/// Computes q* (dev_spec.md Module 3.4, paper §3.2 Eq. 4): of `m` cache-
+/// missing experts this decode step, how many should go to the GPU-fill
+/// path vs the CPU-direct-execute path.
+///
+///   q* ≈ m · (B_P / B_H)
+///
+/// Two edge cases the paper calls for explicitly, not left to chance:
+///   - Always at least 1 fill when m >= 1 ("the cache continues warming
+///     even when the CPU handles most misses" — paper §3.2).
+///   - Never more than m (can't fill more experts than are actually missing).
 int compute_q_star(int m, const CalibrationResult& bandwidths);
 
-// Partitions `missing_experts` into a fill set (first `q` — see
-// compute_q_star()) and a compute set (the rest). SIMPLIFICATION, stated
-// explicitly (CLAUDE.md principle #4): the paper delegates the choice of
-// *which* q experts become F to the cache replacement policy; we don't have
-// that decision logic yet, so this takes them in whatever order the caller
-// provides. Revisit once a real eviction/selection policy exists.
+/// Partitions `missing_experts` into a fill set (first `q` — see
+/// compute_q_star()) and a compute set (the rest). SIMPLIFICATION, stated
+/// explicitly (CLAUDE.md principle #4): the paper delegates the choice of
+/// *which* q experts become F to the cache replacement policy; we don't have
+/// that decision logic yet, so this takes them in whatever order the caller
+/// provides. Revisit once a real eviction/selection policy exists.
 QStarSplit split_missing_experts(const std::vector<uint32_t>& missing_experts, int q);
 
-// What one call to run_step() measured — the raw material for benchmarking
-// against the Modules 3.2/3.3 stall-and-copy baseline (dev_spec.md's
-// "benchmark immediately" instruction).
+/// What one call to run_step() measured — the raw material for benchmarking
+/// against the Modules 3.2/3.3 stall-and-copy baseline (dev_spec.md's
+/// "benchmark immediately" instruction).
 struct QStarStepResult {
     int m = 0;  // total missing experts this step
     int q = 0;  // how many went to the GPU-fill path
@@ -51,17 +51,17 @@ struct QStarStepResult {
     double cpu_compute_seconds = 0.0;  // wall-clock time from dispatch to worker completion
 };
 
-// Orchestrates one decode step's q* split: dispatches the compute set to a
-// persistent CPU worker thread (via the SPSC queue, Module 3.8) while the
-// calling thread handles the fill set through the GPU cache (Module 3.3) —
-// both running concurrently, not sequentially. dev_spec.md Module 3.4.
-//
-// SCOPING NOTE: dev_spec.md §3.4 lists "CPU thread count" as an exposed
-// parameter, implying possibly multiple CPU workers. This baseline uses
-// exactly ONE persistent worker thread, because our SPSC queue (Module
-// 3.8) is strictly single-producer/single-consumer by design — that's the
-// primitive we built. Multiple workers would need either multiple queues
-// or a different (MPMC) queue; a real future enhancement, not faked here.
+/// Orchestrates one decode step's q* split: dispatches the compute set to a
+/// persistent CPU worker thread (via the SPSC queue, Module 3.8) while the
+/// calling thread handles the fill set through the GPU cache (Module 3.3) —
+/// both running concurrently, not sequentially. dev_spec.md Module 3.4.
+///
+/// SCOPING NOTE: dev_spec.md §3.4 lists "CPU thread count" as an exposed
+/// parameter, implying possibly multiple CPU workers. This baseline uses
+/// exactly ONE persistent worker thread, because our SPSC queue (Module
+/// 3.8) is strictly single-producer/single-consumer by design — that's the
+/// primitive we built. Multiple workers would need either multiple queues
+/// or a different (MPMC) queue; a real future enhancement, not faked here.
 class QStarScheduler {
 public:
     QStarScheduler(HostResidentPool& pool, GpuExpertCache& cache);
