@@ -1,0 +1,3 @@
+add_executable(qstar_scheduler_test qstar_scheduler_test.cpp)
+target_link_libraries(qstar_scheduler_test PRIVATE qstar_scheduler GTest::gtest_main)
+gtest_discover_tests(qstar_scheduler_test WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

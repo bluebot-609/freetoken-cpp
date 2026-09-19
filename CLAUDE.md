@@ -6,7 +6,9 @@ This file is read automatically at the start of every Claude Code session in thi
 
 ## Reference Documents in This Repo
 
-### `roadmap.md`
+All three docs below live in `docs/` (not the repo root) — `CLAUDE.md` and `README.md` are the only project docs kept at root, `CLAUDE.md` because Claude Code auto-reads it specifically from there, `README.md` for GitHub's auto-render convention.
+
+### `docs/roadmap.md`
 The learning/planning document. Contains:
 - Skill map (which parts of this project map to which skills the author is building — embedded systems background, C++, low-latency programming, GPU/CUDA, Linux internals, AI inference, agent orchestration)
 - FreeToken (arXiv:2608.16157) as the explicit source of truth this project ports and extends — read Section 0 before touching scheduler code
@@ -16,7 +18,7 @@ The learning/planning document. Contains:
 
 **When to consult it:** at the start of a new phase, when unsure why a design decision was made, or when the author asks "why are we doing it this way."
 
-### `dev_spec.md`
+### `docs/dev_spec.md`
 The engineering specification. Contains:
 - Full repo structure
 - Environment/toolkit choices and why
@@ -36,7 +38,7 @@ The engineering specification. Contains:
 2. **Correctness of the q\* scheduler and calibration pass over breadth of features.** These are the actual point of the project. Everything else (server, harness, SSD tier) is secondary.
 3. **Cite sources for every non-trivial design decision** — inline code comments plus an entry in `docs/citations.md` (format: `[date] [module] [source] — [what was learned/used]`). This is a stated learning requirement for the author, not optional polish. When you implement a module, end your summary with a short "what I referenced and why" note.
 4. **Do not silently simplify the FreeToken design.** If you deviate from the paper's actual formulation (e.g., using a threshold heuristic instead of the closed-form optimal split), say so explicitly in comments and in your session summary — this is a described, intentional simplification, not a shortcut to hide.
-5. **Follow `dev_spec.md` Section 8's build order.** Baseline before scheduler, benchmarking tool alongside core modules (not after), profiling checkpoints at the specified steps — do not skip ahead to the server or harness before Phase 1's core mechanism is benchmarked and solid.
+5. **Follow `docs/dev_spec.md` Section 8's build order.** Baseline before scheduler, benchmarking tool alongside core modules (not after), profiling checkpoints at the specified steps — do not skip ahead to the server or harness before Phase 1's core mechanism is benchmarked and solid.
 
 ---
 
@@ -44,7 +46,7 @@ The engineering specification. Contains:
 
 The author is upskilling from embedded systems into C++/CUDA/ggml/Linux internals. Dumping a complete file leaves them unable to follow what happened. For **every** new module or non-trivial change, in this order:
 
-1. **What and why, before any code.** One short paragraph: what this file/module does, why it's needed now (tie it to the specific `dev_spec.md`/`roadmap.md` step), and how it fits with what already exists. Wait for the author to be following before writing code — don't treat this as a formality to skip through.
+1. **What and why, before any code.** One short paragraph: what this file/module does, why it's needed now (tie it to the specific `docs/dev_spec.md`/`docs/roadmap.md` step), and how it fits with what already exists. Wait for the author to be following before writing code — don't treat this as a formality to skip through.
 2. **Build it in small chunks, not whole files.** Introduce one piece at a time (e.g., "first the struct/interface," then "now the function that fills it in," then "now wiring it into CMake") — each chunk gets a sentence or two on what it does and why it's shaped that way, not just a code block. A chunk should be small enough to actually read and understand in one sitting — a screenful, not a whole file.
 3. **Check in, don't just plow ahead.** After a chunk that introduces something genuinely new (a new ggml API, a new concurrency primitive, a new pattern), pause rather than immediately writing the next five chunks — give the author a chance to ask "wait, why does it work like that" before context piles up.
 4. **Still fine to move fast on:** mechanical/repetitive parts once the pattern's been shown once (e.g., a second nearly-identical CMakeLists.txt), and small fixes/corrections to something just written.
@@ -58,18 +60,18 @@ This applies for the whole project, not just the current module — re-read this
 Claude Code's built-in session resume does not reliably restore full prior context, especially across longer or multi-day sessions. **Do not assume you remember prior sessions.** Instead:
 
 ### On starting any session:
-1. Read `PROGRESS.md` in the repo root (create it if it doesn't exist yet — see template below).
+1. Read `docs/PROGRESS.md` (create it if it doesn't exist yet — see template below).
 2. Read the most recent entries first — they reflect the current actual state, which may differ from what an earlier roadmap phase assumed.
-3. State your understanding of current project state back to the author in one short paragraph before starting work, so any mismatch between `PROGRESS.md` and reality gets caught immediately.
-4. Check `git log --oneline -15` to cross-reference recent commits against what `PROGRESS.md` claims — if they disagree, trust the git history and flag the discrepancy.
+3. State your understanding of current project state back to the author in one short paragraph before starting work, so any mismatch between `docs/PROGRESS.md` and reality gets caught immediately.
+4. Check `git log --oneline -15` to cross-reference recent commits against what `docs/PROGRESS.md` claims — if they disagree, trust the git history and flag the discrepancy.
 
 ### During a session:
-- Keep the built-in todo list (`/todos`) current for in-session task tracking. This is separate from `PROGRESS.md` — todos are for the current session only.
-- If a task or requirement seems to point outside the scope defined in `dev_spec.md` Section 9 (Non-Goals), stop and ask rather than proceeding.
+- Keep the built-in todo list (`/todos`) current for in-session task tracking. This is separate from `docs/PROGRESS.md` — todos are for the current session only.
+- If a task or requirement seems to point outside the scope defined in `docs/dev_spec.md` Section 9 (Non-Goals), stop and ask rather than proceeding.
 
 ### Before ending any session (do this even if the author doesn't ask):
-Update `PROGRESS.md` with:
-- What was completed this session (reference module numbers from `dev_spec.md`, e.g. "Module 3.3")
+Update `docs/PROGRESS.md` with:
+- What was completed this session (reference module numbers from `docs/dev_spec.md`, e.g. "Module 3.3")
 - What's currently in-progress and in what state (e.g. "GPU-Expert Cache eviction logic written, unit tests not yet passing — failing on X")
 - Anything that broke or is blocked, and why
 - The concrete next step — specific enough that a fresh session could pick it up without re-deriving context
@@ -77,7 +79,7 @@ Update `PROGRESS.md` with:
 
 Commit your work with messages tied to module numbers (e.g. `"Module 3.4: q* scheduler threshold split, benchmarked vs naive baseline"`) so git history itself is a secondary continuity record.
 
-### `PROGRESS.md` template (create this file if absent):
+### `docs/PROGRESS.md` template (create this file if absent):
 ```markdown
 # Progress Log
 
@@ -103,7 +105,7 @@ Commit your work with messages tied to module numbers (e.g. `"Module 3.4: q* sch
 ---
 
 ## Quick Reference — Where Things Live
-- Design rationale / "why" → `roadmap.md`
-- Module interfaces, parameters, citations required → `dev_spec.md`
-- Current actual state / what to do next → `PROGRESS.md` (you maintain this)
+- Design rationale / "why" → `docs/roadmap.md`
+- Module interfaces, parameters, citations required → `docs/dev_spec.md`
+- Current actual state / what to do next → `docs/PROGRESS.md` (you maintain this)
 - Sources consulted during implementation → `docs/citations.md` (you maintain this)

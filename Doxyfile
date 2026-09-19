@@ -11,20 +11,20 @@ PROJECT_BRIEF          = "NVIDIA-only C++/ggml port of FreeToken's bandwidth-ada
 OUTPUT_DIRECTORY       = docs_site
 
 # Combine narrative markdown docs with the API reference, per the author's
-# request for "combine mds + api docs + tests".
+# request for "combine mds + api docs + tests". All project docs live under
+# docs/ (except README.md and CLAUDE.md, which stay at repo root by
+# convention -- README.md for GitHub's auto-render, CLAUDE.md because
+# Claude Code auto-reads it specifically from the repo root).
 INPUT                  = docs/index.md \
-                          src \
-                          tests \
-                          roadmap.md \
-                          dev_spec.md \
-                          PROGRESS.md \
+                          README.md \
                           CLAUDE.md \
-                          docs/building.md \
-                          docs/citations.md
+                          docs \
+                          src \
+                          tests
 USE_MDFILE_AS_MAINPAGE = docs/index.md
 RECURSIVE              = YES
 FILE_PATTERNS          = *.h *.cpp *.md
-EXCLUDE                = third_party build docs_site models
+EXCLUDE                = third_party build docs_site models docs/references docs/doxygen-awesome
 
 # Document everything, even members without a doc comment (still shows the
 # signature/structure -- better than silently omitting undocumented code).
@@ -36,6 +36,17 @@ EXTRACT_STATIC          = YES
 GENERATE_TREEVIEW      = YES
 SOURCE_BROWSER         = YES
 GENERATE_LATEX         = NO
+
+# Theme: doxygen-awesome-css (jothepro, MIT, pinned v2.5.0 -- vendored under
+# docs/doxygen-awesome/). Doxygen's own default theme has poor contrast;
+# this is the standard modern replacement. Auto-switches light/dark based
+# on the OS/browser preference, no toggle button needed. HTML_COLORSTYLE
+# must be LIGHT so Doxygen doesn't fight the theme's own dark-mode CSS.
+HTML_EXTRA_STYLESHEET  = docs/doxygen-awesome/doxygen-awesome.css \
+                         docs/doxygen-awesome/doxygen-awesome-sidebar-only.css
+HTML_COLORSTYLE        = LIGHT
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
 
 # Diagrams (graphviz installed alongside doxygen).
 HAVE_DOT               = YES

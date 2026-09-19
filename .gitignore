@@ -3,3 +3,8 @@ benchmark/reports/*
 !benchmark/reports/.gitkeep
 models/
 docs_site/
+/index.html
+# CTest's gtest_discover_tests() cache -- normally lands in build/, but
+# setting WORKING_DIRECTORY on it appears to sometimes write this at the
+# repo root instead. Generated, never commit regardless of where it lands.
+cmake_test_discovery_*.json

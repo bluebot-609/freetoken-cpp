@@ -1,0 +1,7 @@
+add_executable(calibration_smoke calibration_smoke.cpp)
+target_link_libraries(calibration_smoke PRIVATE calibration GTest::gtest_main)
+gtest_discover_tests(calibration_smoke WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(qstar_scheduler_smoke qstar_scheduler_smoke.cpp)
+target_link_libraries(qstar_scheduler_smoke PRIVATE qstar_scheduler model_loader GTest::gtest_main)
+gtest_discover_tests(qstar_scheduler_smoke WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

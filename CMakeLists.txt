@@ -20,6 +20,22 @@ find_package(CUDAToolkit REQUIRED)
 add_subdirectory(third_party/ggml)
 
 add_subdirectory(src)
+
+# GoogleTest, via FetchContent -- per this project's own "no package manager
+# beyond FetchContent/submodules" rule (dev_spec.md Section 2). Pinned to a
+# tagged release, not a branch, same pinning discipline as third_party/ggml.
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.15.2
+)
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+include(GoogleTest)
+
 add_subdirectory(tests/fixtures)
-add_subdirectory(tests/integration)
 add_subdirectory(tests/unit)
+add_subdirectory(tests/integration)
