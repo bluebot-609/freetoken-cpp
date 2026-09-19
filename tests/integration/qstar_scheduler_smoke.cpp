@@ -5,6 +5,7 @@
 #include <chrono>
 #include <vector>
 
+#include "model_loader.h"
 #include "qstar_scheduler.h"
 
 using namespace freetoken::core;
@@ -19,7 +20,7 @@ void make_fake_expert(uint32_t id, float out[4]) {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
     // --- Part 1: correctness, with known numbers (same case already
     // proven in qstar_scheduler_test.cpp: m=8, ratio 0.25 -> q=2) ---
     HostPoolConfig pool_cfg;
@@ -122,6 +123,48 @@ int main() {
         std::printf("q* split (q=%d fill / %d compute): %.2f ms\n",
                     result.q, result.m - result.q, split_seconds * 1e3);
     }
+
+    // --- Part 4: real model weight bytes, not synthetic filler. See
+    // model_loader.h's load_moe_experts_into_pool() doc comment and
+    // PROGRESS.md's placeholder ledger for exactly what's real here (real
+    // GGUF bytes, one of the three matrices a real expert needs) and what
+    // isn't (no real forward-pass math). Correctness-focused, not a scale
+    // benchmark -- this test model only has 12 real experts total. ---
+    const std::string model_path = (argc > 1) ? argv[1] : "models/tiny-random-granite-moe.f16.gguf";
+
+    HostPoolConfig real_pool_cfg;
+    HostResidentPool real_pool(real_pool_cfg);
+    int n_real_experts = load_moe_experts_into_pool(model_path, real_pool);
+
+    bool real_ok = (n_real_experts == 12);  // 6 layers x 2 experts/layer, per this specific model
+    if (!real_ok) {
+        std::fprintf(stderr, "expected 12 real experts, got %d\n", n_real_experts);
+    }
+
+    // 64x32 f16 per expert (see model_loader.h's layout doc) = 4096 bytes.
+    const ExpertSlot* slot0 = real_pool.find(0);
+    if (!slot0 || slot0->size_bytes != 4096) {
+        std::fprintf(stderr, "expert 0: expected 4096 bytes, got %zu\n", slot0 ? slot0->size_bytes : 0);
+        real_ok = false;
+    }
+
+    GpuCacheConfig real_cache_cfg;
+    real_cache_cfg.max_bytes = 12 * 4096;
+    GpuExpertCache real_cache(real_cache_cfg);
+    QStarScheduler real_scheduler(real_pool, real_cache);
+
+    std::vector<uint32_t> real_missing;
+    for (uint32_t id = 0; id < 12; ++id) real_missing.push_back(id);
+    QStarStepResult real_result = real_scheduler.run_step(real_missing, bw);
+
+    std::printf("\nreal model: m=%d q=%d (expect q=3, ratio 0.25 x 12)\n", real_result.m, real_result.q);
+    if (real_result.m != 12 || real_result.q != 3) {
+        std::fprintf(stderr, "real model step: expected m=12 q=3, got m=%d q=%d\n", real_result.m, real_result.q);
+        real_ok = false;
+    }
+
+    std::printf("real model data: %s\n", real_ok ? "PASS" : "FAIL");
+    ok = ok && real_ok;
 
     return ok ? 0 : 1;
 }

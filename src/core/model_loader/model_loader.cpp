@@ -70,4 +70,52 @@ bool load_gguf_and_run_forward_pass(const std::string& gguf_path) {
     return ok;
 }
 
+int load_moe_experts_into_pool(const std::string& gguf_path, HostResidentPool& pool) {
+    ggml_context* data_ctx = nullptr;
+    gguf_init_params gguf_params{ /*.no_alloc=*/ false, /*.ctx=*/ &data_ctx };
+    gguf_context* gguf_ctx = gguf_init_from_file(gguf_path.c_str(), gguf_params);
+    if (!gguf_ctx) {
+        std::fprintf(stderr, "load_moe_experts_into_pool: failed to open '%s'\n", gguf_path.c_str());
+        return 0;
+    }
+
+    constexpr int kExpertsPerLayer = 2;  // per this specific model's ffn_gate_inp shape -- NOT read from metadata (see model_loader.h)
+    int total_registered = 0;
+
+    for (int layer = 0; ; ++layer) {
+        char tensor_name[64];
+        std::snprintf(tensor_name, sizeof(tensor_name), "blk.%d.ffn_gate_exps.weight", layer);
+
+        const int64_t tensor_id = gguf_find_tensor(gguf_ctx, tensor_name);
+        if (tensor_id < 0) {
+            break;  // no more layers -- this is how the layer count is discovered
+        }
+
+        const int64_t* ne = gguf_get_tensor_ne(gguf_ctx, tensor_id);
+        const int64_t n_expert = ne[2];
+        const size_t tensor_bytes = gguf_get_tensor_size(gguf_ctx, tensor_id);
+        const size_t bytes_per_expert = tensor_bytes / static_cast<size_t>(n_expert);
+
+        ggml_tensor* tensor = ggml_get_tensor(data_ctx, tensor_name);
+        const char* base = static_cast<const char*>(tensor->data);
+
+        for (int64_t e = 0; e < n_expert; ++e) {
+            const uint32_t expert_id = static_cast<uint32_t>(layer * kExpertsPerLayer + e);
+            const void* expert_data = base + e * bytes_per_expert;
+            if (pool.register_expert(expert_id, expert_data, bytes_per_expert)) {
+                ++total_registered;
+            } else {
+                std::fprintf(stderr, "load_moe_experts_into_pool: failed to register expert %u\n", expert_id);
+            }
+        }
+    }
+
+    std::printf("load_moe_experts_into_pool: registered %d real experts from '%s'\n",
+                total_registered, gguf_path.c_str());
+
+    ggml_free(data_ctx);
+    gguf_free(gguf_ctx);
+    return total_registered;
+}
+
 }  // namespace freetoken::core
