@@ -37,8 +37,8 @@ QStarSplit split_missing_experts(const std::vector<uint32_t>& missing_experts, i
     return split;
 }
 
-QStarScheduler::QStarScheduler(HostResidentPool& pool, GpuExpertCache& cache)
-    : pool_(pool), cache_(cache), work_queue_(/*capacity=*/1024) {
+QStarScheduler::QStarScheduler(HostResidentPool& pool, GpuExpertCache& cache, SelectionPolicy policy)
+    : pool_(pool), cache_(cache), policy_(policy), work_queue_(/*capacity=*/1024) {
     // Start the persistent worker now, once — matches the paper's own
     // description of its CPU workers as "a persistent C++ pool pinned to
     // physical cores," not something spun up fresh per decode step.
@@ -105,7 +105,7 @@ QStarStepResult QStarScheduler::run_step(const std::vector<uint32_t>& missing_ex
     result.m = static_cast<int>(missing_experts.size());
     result.q = compute_q_star(result.m, bandwidths);
 
-    QStarSplit split = split_missing_experts(missing_experts, result.q);
+    QStarSplit split = select_experts(policy_, missing_experts, result.q, pool_, history_);
     const int expected_completed = static_cast<int>(split.compute_set.size());
 
     // completed_count_ accumulates across every call to run_step() over

@@ -46,6 +46,14 @@ public:
     /// baseline. Returns nullptr if `expert_id` isn't in `host_pool` either.
     const void* get_or_fetch(uint32_t expert_id, const HostResidentPool& host_pool);
 
+    /// True if `expert_id` is currently resident, WITHOUT fetching it or
+    /// counting as a hit/miss, and without touching its LRU recency. A
+    /// real caller needs this to even determine what "missing_experts" is
+    /// in the first place, before calling QStarScheduler::run_step() --
+    /// added when building the first thing that actually needed it (a
+    /// multi-step selection-policy benchmark), not speculatively.
+    bool contains(uint32_t expert_id) const;
+
     /// Ground truth for hit/miss behavior — roadmap.md lists "cache hit
     /// rate" as required instrumentation for Phase 1 anyway; timing alone
     /// isn't a reliable way to tell hit from miss apart (a tiny copy is

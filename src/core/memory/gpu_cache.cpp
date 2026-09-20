@@ -15,6 +15,15 @@ GpuExpertCache::~GpuExpertCache() {
     }
 }
 
+bool GpuExpertCache::contains(uint32_t expert_id) const {
+    for (const auto& slot : slots_) {
+        if (slot.expert_id == expert_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const void* GpuExpertCache::get_or_fetch(uint32_t expert_id, const HostResidentPool& host_pool) {
     ++clock_;
 

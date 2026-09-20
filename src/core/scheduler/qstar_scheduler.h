@@ -8,18 +8,10 @@
 #include "calibration.h"
 #include "gpu_cache.h"
 #include "host_pool.h"
+#include "selection_policy.h"
 #include "spsc_queue.h"
 
 namespace freetoken::core {
-
-/// The result of splitting one decode step's missing experts (dev_spec.md
-/// Module 3.4). `fill_set` goes through the GPU cache (Module 3.3);
-/// `compute_set` is computed directly on the CPU against the Host-Resident
-/// Pool (Module 3.2), bypassing the GPU entirely for those experts.
-struct QStarSplit {
-    std::vector<uint32_t> fill_set;
-    std::vector<uint32_t> compute_set;
-};
 
 /// Computes q* (dev_spec.md Module 3.4, paper §3.2 Eq. 4): of `m` cache-
 /// missing experts this decode step, how many should go to the GPU-fill
@@ -64,7 +56,11 @@ struct QStarStepResult {
 /// or a different (MPMC) queue; a real future enhancement, not faked here.
 class QStarScheduler {
 public:
-    QStarScheduler(HostResidentPool& pool, GpuExpertCache& cache);
+    // `policy` defaults to FirstInOrder -- today's existing behavior --
+    // so existing callers are unaffected unless they explicitly ask for
+    // something else.
+    QStarScheduler(HostResidentPool& pool, GpuExpertCache& cache,
+                    SelectionPolicy policy = SelectionPolicy::FirstInOrder);
     ~QStarScheduler();
 
     QStarScheduler(const QStarScheduler&) = delete;
@@ -77,6 +73,8 @@ private:
 
     HostResidentPool& pool_;
     GpuExpertCache& cache_;
+    SelectionPolicy policy_;
+    SelectionHistory history_;
 
     SpscQueue<uint32_t> work_queue_;
     std::thread worker_;
